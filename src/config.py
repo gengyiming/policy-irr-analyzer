@@ -70,11 +70,8 @@ class PolicyConfig:
     withdrawal_data: List[WithdrawalRecord]
 
 
-def load_policy(json_path: str) -> PolicyConfig:
-    """Load and validate policy JSON configuration."""
-    with open(json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
+def load_policy_from_dict(data: dict) -> PolicyConfig:
+    """Load and validate policy data from a Python dict (same schema as JSON)."""
     policy_info = PolicyInfo(**data['policy_info'])
 
     brand = BrandConfig(**data.get('brand', {}))
@@ -102,6 +99,13 @@ def load_policy(json_path: str) -> PolicyConfig:
         print(f"  WARNING: {w}")
 
     return config
+
+
+def load_policy(json_path: str) -> PolicyConfig:
+    """Load and validate policy JSON configuration."""
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    return load_policy_from_dict(data)
 
 
 def validate_policy(config: PolicyConfig) -> List[str]:
