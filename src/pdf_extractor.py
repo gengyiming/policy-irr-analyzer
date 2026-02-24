@@ -112,13 +112,14 @@ def _identify_table_type(header_rows: list, ncols: int) -> Optional[str]:
     # Check for no_withdrawal keywords (surrender value tables)
     nw_keywords = [
         '保证现金价值', '保證現金價值', '退保价值', '退保價值',
-        '保证退保', '保證退保', '累积保费', '累積保費',
+        '退保发还', '退保發還', '保证退保', '保證退保',
+        '累积保费', '累積保費', '累积已缴保费', '累積已繳保費',
         'guaranteed', 'surrender', 'cash value',
         '(a)', '(b)', '(c)', '(e)',
     ]
     # Check for death benefit keywords
     db_keywords = [
-        '身故赔偿', '身故賠償', '死亡保障', '死亡保障',
+        '身故赔偿', '身故賠償', '死亡保障',
         'death benefit', 'death_benefit',
         '(f)', '(g)', '(h)', '(i)', '(j)',
     ]
@@ -137,15 +138,18 @@ def _identify_table_type(header_rows: list, ncols: int) -> Optional[str]:
     # Withdrawal tables are typically 10 columns with withdrawal keywords
     if wd_score >= 2 and ncols >= 8:
         return 'withdrawal'
+    # No-withdrawal tables often also contain a death benefit column, so
+    # when both NW and DB keywords match, prefer NW if NW score is higher
+    if nw_score >= 2 and 6 <= ncols <= 10:
+        return 'no_withdrawal'
     # Death benefit tables are typically 10 columns
     if db_score >= 2 and ncols >= 8:
         return 'death_benefit'
-    # No-withdrawal tables: 7-9 columns with surrender value keywords
-    if nw_score >= 2 and 6 <= ncols <= 10:
-        return 'no_withdrawal'
 
     # --- Tier 3: Single strong keyword match with relaxed column count ---
-    if nw_score >= 1 and 6 <= ncols <= 10 and db_score == 0 and wd_score == 0:
+    # Standard AIA no-withdrawal tables include a death benefit column,
+    # so allow NW even when db_score > 0 if NW score is at least as high
+    if nw_score >= 1 and 6 <= ncols <= 10 and nw_score >= db_score:
         return 'no_withdrawal'
     if db_score >= 1 and ncols >= 8 and wd_score == 0:
         return 'death_benefit'
