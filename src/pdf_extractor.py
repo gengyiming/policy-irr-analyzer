@@ -79,13 +79,63 @@ def _get_table_header_text(header_rows: list) -> str:
     return ' '.join(parts)
 
 
+def _is_irrelevant_table(header_rows: list) -> bool:
+    """Check if a table is clearly not a financial data table.
+
+    Filters out tables about exams, scholarships, websites, disclaimers, etc.
+    that appear in AIA PDFs but are not policy data.
+    """
+    flat = _get_table_header_text(header_rows)
+
+    blacklist_keywords = [
+        # Exam / scholarship tables
+        '考试', '考試', '成绩', '成績', '奖金', '獎金', '学术', '學術',
+        '文凭', '文憑', 'exam', 'hkdse',
+        # Reference / website tables
+        '阁下', '閣下', '浏览', '瀏覽', '网址', '網址', '网站', '網站',
+        '参考', '參考',
+        # Historical dividend info tables
+        '过往派发', '過往派發', '过往红利', '過往紅利',
+        # Disclaimer tables
+        '免责', '免責', '声明', '聲明',
+        # Contact / address tables
+        '联络', '聯絡', '地址',
+    ]
+
+    flat_lower = flat.lower()
+    for kw in blacklist_keywords:
+        if kw in flat or kw in flat_lower:
+            return True
+    return False
+
+
+def _count_data_rows(table: list) -> int:
+    """Count how many rows in a table start with a year number (digits).
+
+    This helps distinguish real data tables (20+ year rows) from
+    small informational tables (2-5 rows).
+    """
+    header_rows = _detect_header_rows(table)
+    count = 0
+    for row in table[header_rows:]:
+        if not row or not row[0]:
+            continue
+        first_cell = decode_cid(str(row[0])).strip()
+        # Check first value (may be multi-line with 5 years packed)
+        first_val = first_cell.split('\n')[0].strip()
+        if first_val.isdigit():
+            count += 1
+    return count
+
+
 def _identify_table_type(header_rows: list, ncols: int) -> Optional[str]:
     """Identify table type from decoded header labels and column count.
 
     Uses a multi-tier strategy:
-    1. Exact match: original strict rules (column count + specific labels)
-    2. Keyword match: Chinese/English keywords with flexible column counts
-    3. Returns None if no match found
+    1. Blacklist check: skip obviously irrelevant tables
+    2. Exact match: original strict rules (column count + specific labels)
+    3. Keyword match: Chinese/English keywords with flexible column counts
+    4. Returns None if no match found
 
     Returns:
         'no_withdrawal' — surrender value table
@@ -93,6 +143,10 @@ def _identify_table_type(header_rows: list, ncols: int) -> Optional[str]:
         'withdrawal'     — withdrawal scenario table
         None             — unknown
     """
+    # --- Pre-filter: skip irrelevant tables ---
+    if _is_irrelevant_table(header_rows):
+        return None
+
     flat = _get_table_header_text(header_rows)
     flat_lower = flat.lower()
 
@@ -108,52 +162,57 @@ def _identify_table_type(header_rows: list, ncols: int) -> Optional[str]:
     if ncols == 10 and '(G)' in flat:
         return 'death_benefit'
 
-    # --- Tier 2: Flexible keyword matching ---
-    # Check for no_withdrawal keywords (surrender value tables)
-    nw_keywords = [
+    # --- Tier 2: Keyword matching (requires 2+ keyword hits) ---
+    # Strong financial keywords (high confidence)
+    nw_strong = [
         '保证现金价值', '保證現金價值', '退保价值', '退保價值',
         '退保发还', '退保發還', '保证退保', '保證退保',
         '累积保费', '累積保費', '累积已缴保费', '累積已繳保費',
         'guaranteed', 'surrender', 'cash value',
-        '(a)', '(b)', '(c)', '(e)',
     ]
-    # Check for death benefit keywords
-    db_keywords = [
+    # Weak markers (only count when combined with strong keywords)
+    nw_weak = ['(a)', '(b)', '(c)', '(e)']
+
+    db_strong = [
         '身故赔偿', '身故賠償', '死亡保障',
-        'death benefit', 'death_benefit',
-        '(f)', '(g)', '(h)', '(i)', '(j)',
+        'death benefit',
     ]
-    # Check for withdrawal keywords
-    wd_keywords = [
+    db_weak = ['(f)', '(g)', '(h)', '(i)', '(j)']
+
+    wd_strong = [
         '提取', '提領', '每年可提取', '每年可提領',
         '提取方案', '提領方案',
         'withdrawal', 'withdraw',
-        '(1)', '(2)',
     ]
+    wd_weak = ['(1)', '(2)']
 
-    nw_score = sum(1 for kw in nw_keywords if kw in flat_lower or kw in flat)
-    db_score = sum(1 for kw in db_keywords if kw in flat_lower or kw in flat)
-    wd_score = sum(1 for kw in wd_keywords if kw in flat_lower or kw in flat)
+    nw_strong_score = sum(1 for kw in nw_strong if kw in flat_lower or kw in flat)
+    nw_weak_score = sum(1 for kw in nw_weak if kw in flat_lower or kw in flat)
+    db_strong_score = sum(1 for kw in db_strong if kw in flat_lower or kw in flat)
+    db_weak_score = sum(1 for kw in db_weak if kw in flat_lower or kw in flat)
+    wd_strong_score = sum(1 for kw in wd_strong if kw in flat_lower or kw in flat)
+    wd_weak_score = sum(1 for kw in wd_weak if kw in flat_lower or kw in flat)
 
-    # Withdrawal tables are typically 10 columns with withdrawal keywords
-    if wd_score >= 2 and ncols >= 8:
+    # Total scores: strong keywords count double
+    nw_score = nw_strong_score * 2 + nw_weak_score
+    db_score = db_strong_score * 2 + db_weak_score
+    wd_score = wd_strong_score * 2 + wd_weak_score
+
+    # Require at least one STRONG keyword hit, or 3+ weak hits
+    # This prevents false matches from just "(a)" or "(1)" alone
+    if wd_strong_score >= 1 and wd_score >= 2 and ncols >= 8:
         return 'withdrawal'
-    # No-withdrawal tables often also contain a death benefit column, so
-    # when both NW and DB keywords match, prefer NW if NW score is higher
-    if nw_score >= 2 and 6 <= ncols <= 10:
+    if nw_strong_score >= 1 and nw_score >= 2 and 6 <= ncols <= 10:
         return 'no_withdrawal'
-    # Death benefit tables are typically 10 columns
-    if db_score >= 2 and ncols >= 8:
+    if db_strong_score >= 1 and db_score >= 2 and ncols >= 8:
         return 'death_benefit'
 
-    # --- Tier 3: Single strong keyword match with relaxed column count ---
-    # Standard AIA no-withdrawal tables include a death benefit column,
-    # so allow NW even when db_score > 0 if NW score is at least as high
-    if nw_score >= 1 and 6 <= ncols <= 10 and nw_score >= db_score:
+    # --- Tier 3: Weak-only matching (require 3+ weak markers) ---
+    if nw_weak_score >= 3 and 6 <= ncols <= 10 and nw_score > db_score:
         return 'no_withdrawal'
-    if db_score >= 1 and ncols >= 8 and wd_score == 0:
+    if db_weak_score >= 3 and ncols >= 8:
         return 'death_benefit'
-    if wd_score >= 1 and ncols >= 8:
+    if wd_weak_score >= 2 and ncols >= 8 and wd_score > nw_score:
         return 'withdrawal'
 
     return None
@@ -353,9 +412,29 @@ class AIAPDFExtractor:
                 ncols = max(len(row) for row in table)
                 nrows = len(table)
 
-                # Small tables on page 1 are policy info
-                if page_idx == 0 and nrows <= 3:
+                # Small tables on early pages are policy info
+                if page_idx <= 1 and nrows <= 4 and ncols <= 4:
                     policy_tables.append(table)
+                    continue
+
+                # Skip tables with too few columns (not financial data)
+                if ncols < 5:
+                    header_preview = ''
+                    try:
+                        preview_cells = []
+                        for row in table[:min(2, nrows)]:
+                            for cell in row[:min(4, len(row))]:
+                                if cell:
+                                    decoded = decode_cid(str(cell)).strip()[:30]
+                                    if decoded:
+                                        preview_cells.append(decoded)
+                        header_preview = ' | '.join(preview_cells[:6])
+                    except Exception:
+                        header_preview = '(unable to decode)'
+                    self.warnings.append(
+                        f"Page {page_idx+1}: 跳过窄表格 ({nrows}行x{ncols}列), "
+                        f"表头: {header_preview}"
+                    )
                     continue
 
                 # Identify table type from header
@@ -388,43 +467,56 @@ class AIAPDFExtractor:
                         f"Page {page_idx+1}: 未识别表格 ({nrows}行x{ncols}列), "
                         f"表头: {header_preview}"
                     )
-                    # Keep for fallback classification
-                    if nrows > 3:
+                    # Keep for fallback classification (only tables with enough data rows)
+                    data_row_count = _count_data_rows(table)
+                    if nrows > 3 and data_row_count >= 2:
                         unclassified_tables.append(table)
+
+        # --- Post-classification validation ---
+        # Filter out tables that don't actually contain year-based data
+        nw_tables = self._validate_data_tables(nw_tables, 'no_withdrawal')
+        db_tables = self._validate_data_tables(db_tables, 'death_benefit')
+        wd_tables = self._validate_data_tables(wd_tables, 'withdrawal')
 
         # --- Fallback: if no nw_tables found, try heuristic classification ---
         if not nw_tables and unclassified_tables:
             self.warnings.append(
                 "表格类型自动推断：严格匹配失败，使用启发式匹配"
             )
-            # Sort by size (rows * cols) descending - largest tables first
+            # Sort by data row count descending - tables with most year rows first
             unclassified_tables.sort(
-                key=lambda t: len(t) * max(len(r) for r in t),
+                key=lambda t: _count_data_rows(t),
                 reverse=True,
             )
 
             for table in unclassified_tables:
                 ncols = max(len(row) for row in table)
-                # Try to determine type by checking data content
+                data_rows = _count_data_rows(table)
+                # Only consider tables with substantial data
+                if data_rows < 3:
+                    continue
                 ttype = self._heuristic_classify(table)
                 if ttype == 'no_withdrawal' and not nw_tables:
                     nw_tables.append(table)
                     self.warnings.append(
-                        f"  → 启发式: 表格({len(table)}行x{ncols}列) → no_withdrawal"
+                        f"  → 启发式: 表格({len(table)}行x{ncols}列, {data_rows}数据行) → no_withdrawal"
                     )
                 elif ttype == 'death_benefit' and not db_tables:
                     db_tables.append(table)
                 elif ttype == 'withdrawal' and not wd_tables:
                     wd_tables.append(table)
 
-            # Last resort: if still no nw_tables, use the largest table
+            # Last resort: if still no nw_tables, use the table with most data rows
             if not nw_tables and unclassified_tables:
+                # Only if the largest table has enough data
                 largest = unclassified_tables[0]
                 ncols = max(len(row) for row in largest)
-                nw_tables.append(largest)
-                self.warnings.append(
-                    f"  → 最后手段: 最大表格({len(largest)}行x{ncols}列) → no_withdrawal"
-                )
+                data_rows = _count_data_rows(largest)
+                if data_rows >= 5:
+                    nw_tables.append(largest)
+                    self.warnings.append(
+                        f"  → 最后手段: 最大表格({len(largest)}行x{ncols}列, {data_rows}数据行) → no_withdrawal"
+                    )
 
         # Log classification summary
         self.warnings.append(
@@ -441,7 +533,9 @@ class AIAPDFExtractor:
         # 4. Auto-detect premium from yearly data (most reliable source)
         if yearly_data:
             first_year_prem = yearly_data[0].get('cumulative_premium', 0)
-            if first_year_prem > 0:
+            # Validate: premium should be a reasonable amount (>= 100)
+            # A value like 20 is likely a year number, not a premium
+            if first_year_prem >= 100:
                 policy_info['annual_premium'] = first_year_prem
                 # Detect payment_years from when cumulative stops increasing
                 for i in range(1, len(yearly_data)):
@@ -453,6 +547,20 @@ class AIAPDFExtractor:
                     f"Auto-detected premium: {policy_info['annual_premium']:,.0f}/year x "
                     f"{policy_info['payment_years']} years = {policy_info['total_premium']:,.0f}"
                 )
+            elif first_year_prem > 0:
+                self.warnings.append(
+                    f"跳过可疑保费值: {first_year_prem} (太小，可能是年份编号)"
+                )
+                # Try to detect from year 2: if cumulative doubles, year 1 value is annual premium
+                if len(yearly_data) >= 2:
+                    second_year_prem = yearly_data[1].get('cumulative_premium', 0)
+                    if second_year_prem >= 100 and abs(second_year_prem - first_year_prem * 2) < first_year_prem * 0.1:
+                        policy_info['annual_premium'] = first_year_prem
+                        for i in range(1, len(yearly_data)):
+                            if yearly_data[i]['cumulative_premium'] == yearly_data[i-1]['cumulative_premium']:
+                                policy_info['payment_years'] = i
+                                break
+                        policy_info['total_premium'] = policy_info['annual_premium'] * policy_info['payment_years']
 
         # Auto-detect age from yearly data
         if yearly_data and policy_info['age_at_issue'] == 0:
@@ -484,6 +592,63 @@ class AIAPDFExtractor:
             result['withdrawal_data'] = withdrawal_data
 
         return result
+
+    # ------------------------------------------------------------------
+    # Table validation
+    # ------------------------------------------------------------------
+
+    def _validate_data_tables(self, tables: list, table_type: str) -> list:
+        """Filter out tables that don't contain valid year-based financial data.
+
+        Checks that tables have:
+        - At least 2 data rows with year numbers in the first column
+        - Year numbers that look reasonable (1-120)
+        - Financial values (numbers > 0) in data columns
+        """
+        valid = []
+        for table in tables:
+            rows = _expand_rows(table)
+            if not rows:
+                continue
+
+            # Count rows that start with a valid year number
+            year_rows = []
+            for r in rows:
+                if r and r[0].strip().isdigit():
+                    year = int(r[0].strip())
+                    if 1 <= year <= 120:
+                        year_rows.append(r)
+
+            if len(year_rows) < 2:
+                ncols = max(len(row) for row in table)
+                self.warnings.append(
+                    f"  验证过滤: {table_type} 表格({len(table)}行x{ncols}列) "
+                    f"只有 {len(year_rows)} 个有效年份行，已跳过"
+                )
+                continue
+
+            # Check that at least some rows have financial values (> 0) beyond year/age
+            has_financial_data = False
+            for r in year_rows[:5]:
+                for cell in r[2:]:  # Skip year and age columns
+                    val = clean_numeric(cell)
+                    if val > 0:
+                        has_financial_data = True
+                        break
+                if has_financial_data:
+                    break
+
+            if not has_financial_data:
+                ncols = max(len(row) for row in table)
+                self.warnings.append(
+                    f"  验证过滤: {table_type} 表格({len(table)}行x{ncols}列) "
+                    f"无有效财务数据，已跳过"
+                )
+                continue
+
+            valid.append(table)
+
+        return valid
 
     # ------------------------------------------------------------------
     # Heuristic table classification
@@ -593,18 +758,27 @@ class AIAPDFExtractor:
                         break
 
         # Scan all decoded cells for premium amounts and payment years
+        premium_candidates = []
         for cell in all_decoded_cells:
             # Look for comma-separated numbers (premium amounts)
             amounts = re.findall(r'([\d,]+(?:\.\d+)?)', cell)
             for amt in amounts:
                 val = clean_numeric(amt)
-                if 1000 <= val <= 1000000 and info['annual_premium'] == 0:
-                    info['annual_premium'] = val
+                if 500 <= val <= 1000000:
+                    premium_candidates.append(val)
             # Look for standalone small numbers (payment years)
             if re.match(r'^\d{1,2}$', cell.strip()):
                 py = int(cell.strip())
                 if 2 <= py <= 30:
                     info['payment_years'] = py
+
+        # Pick the most likely premium: prefer the first value >= 1000
+        for val in premium_candidates:
+            if val >= 1000:
+                info['annual_premium'] = val
+                break
+        if info['annual_premium'] == 0 and premium_candidates:
+            info['annual_premium'] = premium_candidates[0]
 
         # Auto-detect product from page text
         page1_fitz_text = ''
