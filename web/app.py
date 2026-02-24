@@ -9,11 +9,12 @@ import shutil
 import tempfile
 import threading
 import time
+import functools
 from pathlib import Path
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, send_file, abort
+    url_for, send_file, abort, session
 )
 
 # Add project root to path so we can import src modules
@@ -28,6 +29,19 @@ from src.html_writer import create_html_report
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+
+APP_PASSWORD = os.environ.get('APP_PASSWORD', '')
+
+
+def login_required(f):
+    """Require password authentication when APP_PASSWORD is set."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if APP_PASSWORD and not session.get('authenticated'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
 
 # Task storage: task_id -> {dir, excel_path, html_path, policy_info, warnings, created_at}
 _tasks = {}
@@ -56,12 +70,31 @@ _cleanup_thread = threading.Thread(target=_cleanup_old_tasks, daemon=True)
 _cleanup_thread.start()
 
 
+@app.route('/health')
+def health():
+    return {'status': 'ok'}, 200
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if not APP_PASSWORD:
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        if request.form.get('password') == APP_PASSWORD:
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+        return render_template('login.html', error='密码错误 Incorrect password')
+    return render_template('login.html')
+
+
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
 
 @app.route('/analyze', methods=['POST'])
+@login_required
 def analyze():
     if 'pdf_file' not in request.files:
         return render_template('error.html',
@@ -137,6 +170,7 @@ def analyze():
 
 
 @app.route('/result/<task_id>')
+@login_required
 def result(task_id):
     with _tasks_lock:
         task = _tasks.get(task_id)
@@ -152,6 +186,7 @@ def result(task_id):
 
 
 @app.route('/report/<task_id>')
+@login_required
 def report(task_id):
     with _tasks_lock:
         task = _tasks.get(task_id)
@@ -161,6 +196,7 @@ def report(task_id):
 
 
 @app.route('/download/<task_id>/excel')
+@login_required
 def download_excel(task_id):
     with _tasks_lock:
         task = _tasks.get(task_id)
@@ -171,6 +207,7 @@ def download_excel(task_id):
 
 
 @app.route('/download/<task_id>/html')
+@login_required
 def download_html(task_id):
     with _tasks_lock:
         task = _tasks.get(task_id)
@@ -181,4 +218,4 @@ def download_html(task_id):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=os.environ.get('FLASK_DEBUG', '') == '1')

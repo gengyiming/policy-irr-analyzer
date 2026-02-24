@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}登录 - 保单IRR分析工具{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="card upload-card" style="max-width: 420px; margin: 60px auto;">
+        <h2>访问验证</h2>
+        <p class="subtitle">Please enter password to continue</p>
+
+        {% if error %}
+        <div class="alert-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <div style="margin: 24px 0;">
+                <input type="password" name="password" placeholder="请输入访问密码"
+                       class="input-password" required autofocus>
+            </div>
+            <button type="submit" class="btn-analyze">
+                <span class="btn-text">进入 Enter</span>
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
