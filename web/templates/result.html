@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}分析结果 - {{ policy_info.product_name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if warnings %}
+    <div class="card warning-card">
+        <h3>提取提示 Extraction Notes</h3>
+        <ul>
+            {% for w in warnings %}
+            <li>{{ w }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="card actions-card">
+        <div class="actions-header">
+            <h2>分析完成 Analysis Complete</h2>
+            <div class="policy-brief">
+                {{ policy_info.product_name }} |
+                {{ policy_info.insured_name }} |
+                {{ policy_info.currency_symbol }}{{ "{:,.0f}".format(policy_info.annual_premium) }}/年 &times; {{ policy_info.payment_years }}年
+            </div>
+        </div>
+        <div class="actions-buttons">
+            <a href="{{ url_for('download_excel', task_id=task_id) }}" class="btn btn-excel">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                下载 Excel
+            </a>
+            <a href="{{ url_for('download_html', task_id=task_id) }}" class="btn btn-html">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                下载 HTML
+            </a>
+            <a href="{{ url_for('report', task_id=task_id) }}" class="btn btn-view" target="_blank">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                新窗口打开
+            </a>
+            <a href="{{ url_for('index') }}" class="btn btn-new">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                分析新文件
+            </a>
+        </div>
+    </div>
+
+    <div class="report-frame-wrapper">
+        <iframe src="{{ url_for('report', task_id=task_id) }}" class="report-frame" id="reportFrame"></iframe>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-resize iframe to content height
+const iframe = document.getElementById('reportFrame');
+iframe.addEventListener('load', function() {
+    try {
+        const height = iframe.contentDocument.body.scrollHeight;
+        iframe.style.height = Math.max(height + 40, 600) + 'px';
+    } catch(e) {
+        iframe.style.height = '2000px';
+    }
+});
+</script>
+{% endblock %}

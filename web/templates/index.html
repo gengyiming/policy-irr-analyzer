@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}上传保单 PDF - 保单IRR分析工具{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="card upload-card">
+        <h2>上传保单 PDF</h2>
+        <p class="subtitle">Upload AIA Policy Illustration PDF</p>
+
+        <form id="uploadForm" action="{{ url_for('analyze') }}" method="POST" enctype="multipart/form-data">
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                </div>
+                <p class="drop-zone-text">拖拽 PDF 文件到此处<br><span>或点击选择文件</span></p>
+                <p class="drop-zone-hint">仅支持 AIA 保单计划书 PDF，最大 16MB</p>
+                <input type="file" name="pdf_file" id="fileInput" accept=".pdf" required>
+            </div>
+
+            <div class="file-info" id="fileInfo" style="display:none;">
+                <div class="file-info-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                </div>
+                <div class="file-info-details">
+                    <span class="file-name" id="fileName"></span>
+                    <span class="file-size" id="fileSize"></span>
+                </div>
+                <button type="button" class="file-remove" id="fileRemove" title="移除文件">&times;</button>
+            </div>
+
+            <button type="submit" class="btn-analyze" id="btnAnalyze" disabled>
+                <span class="btn-text">开始分析 Start Analysis</span>
+                <span class="btn-loading" style="display:none;">
+                    <span class="spinner"></span>
+                    正在分析中，请稍候...
+                </span>
+            </button>
+        </form>
+    </div>
+
+    <div class="card info-card">
+        <h3>使用说明 Instructions</h3>
+        <div class="instructions">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div>
+                    <strong>上传 PDF</strong>
+                    <p>上传 AIA 保单计划书 PDF 文件（建议书/利益说明书）</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div>
+                    <strong>自动分析</strong>
+                    <p>系统自动提取保单数据并计算各年度 IRR</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div>
+                    <strong>查看报告</strong>
+                    <p>在线预览交互式 HTML 报告，或下载 Excel/HTML 文件</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const fileName = document.getElementById('fileName');
+const fileSize = document.getElementById('fileSize');
+const fileRemove = document.getElementById('fileRemove');
+const btnAnalyze = document.getElementById('btnAnalyze');
+const form = document.getElementById('uploadForm');
+
+// Click to select
+dropZone.addEventListener('click', () => fileInput.click());
+
+// Drag & drop
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+});
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('drag-over');
+});
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const files = e.dataTransfer.files;
+    if (files.length > 0 && files[0].name.toLowerCase().endsWith('.pdf')) {
+        fileInput.files = files;
+        showFileInfo(files[0]);
+    }
+});
+
+// File selected
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+        showFileInfo(fileInput.files[0]);
+    }
+});
+
+function showFileInfo(file) {
+    fileName.textContent = file.name;
+    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+    fileSize.textContent = sizeMB + ' MB';
+    dropZone.style.display = 'none';
+    fileInfo.style.display = 'flex';
+    btnAnalyze.disabled = false;
+}
+
+fileRemove.addEventListener('click', () => {
+    fileInput.value = '';
+    dropZone.style.display = 'flex';
+    fileInfo.style.display = 'none';
+    btnAnalyze.disabled = true;
+});
+
+// Submit loading state
+form.addEventListener('submit', () => {
+    btnAnalyze.disabled = true;
+    btnAnalyze.querySelector('.btn-text').style.display = 'none';
+    btnAnalyze.querySelector('.btn-loading').style.display = 'inline-flex';
+});
+</script>
+{% endblock %}
