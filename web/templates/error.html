@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - 保单IRR分析工具{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="card error-card">
+        <div class="error-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+        </div>
+        <h2>{{ title }}</h2>
+        <p class="error-message">{{ message }}</p>
+        <a href="{{ url_for('index') }}" class="btn btn-back">
+            返回重新上传 Back to Upload
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}保单IRR分析工具{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="nav-inner">
+        <a href="{{ url_for('index') }}" class="nav-brand">
+            <img src="https://companieslogo.com/img/orig/1299.HK_BIG.D-f5e85a14.png?t=1720244490" alt="AIA" class="nav-logo">
+            <span>保单 IRR 分析工具</span>
+        </a>
+        <div class="nav-subtitle">Insurance Policy IRR Analyzer</div>
+    </div>
+</nav>
+
+<main class="main-content">
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+    <p>保单IRR计算工具 | Insurance IRR Analyzer</p>
+    <p>免责声明：IRR仅供参考，非保证金额部分的实际回报可能与预期不同。</p>
+    <p style="margin-top: 8px; font-weight: 600;">版权所有 &copy;GengWealth</p>
+</footer>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>
