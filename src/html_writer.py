@@ -563,10 +563,13 @@ tr:hover {{ background: #f5f5f5; }}
             <table>
                 <thead>
                     <tr>
-                        <th>Year</th><th>Age</th><th>Cumul. Premium</th>
-                        <th>Guaranteed CV</th><th>Total Surrender</th>
-                        <th>IRR (Total)</th>
-                        <th>Death Benefit</th>
+                        <th>Year<br>年期</th>
+                        <th>Age<br>年龄</th>
+                        <th>Cumulative Premium<br>累计保费</th>
+                        <th>Guaranteed CV<br>保证现金价值</th>
+                        <th>Total Surrender<br>退保总额</th>
+                        <th>IRR (Total)<br>预期IRR</th>
+                        <th>Death Benefit<br>身故赔偿</th>
                     </tr>
                 </thead>
                 <tbody>{full_nw_rows}</tbody>
@@ -582,9 +585,13 @@ tr:hover {{ background: #f5f5f5; }}
             <table>
                 <thead>
                     <tr>
-                        <th>Year</th><th>Age</th><th>Withdrawal</th>
-                        <th>Cumul. Withdrawals</th><th>Remaining Guar.</th>
-                        <th>Remaining Total</th><th>IRR (Total)</th>
+                        <th>Year<br>年期</th>
+                        <th>Age<br>年龄</th>
+                        <th>Withdrawal<br>当年提取</th>
+                        <th>Cumul. Withdrawals<br>累计提取</th>
+                        <th>Remaining Guaranteed<br>剩余保证</th>
+                        <th>Remaining Total<br>剩余退保总额</th>
+                        <th>IRR (Total)<br>预期IRR</th>
                     </tr>
                 </thead>
                 <tbody>{full_wd_rows}</tbody>

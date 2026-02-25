@@ -184,21 +184,38 @@ class AIAPDFExtractor:
         yearly_data = self._extract_yearly_data(nw_tables, db_tables, policy_info)
 
         # 4. Auto-detect premium from yearly data (most reliable source)
+        # Keep UI notes clean: only emit warning when detected values differ
+        # from non-zero values parsed from page 1.
         if yearly_data:
             first_year_prem = yearly_data[0].get('cumulative_premium', 0)
             if first_year_prem > 0:
-                policy_info['annual_premium'] = first_year_prem
-                # Detect payment years from when cumulative premium stops increasing
+                old_annual_premium = policy_info.get('annual_premium', 0)
+                old_payment_years = policy_info.get('payment_years', 0)
+                old_total_premium = policy_info.get('total_premium', 0)
+
+                detected_payment_years = old_payment_years or 5
                 for i in range(1, len(yearly_data)):
                     if yearly_data[i]['cumulative_premium'] == yearly_data[i - 1]['cumulative_premium']:
-                        policy_info['payment_years'] = i
+                        detected_payment_years = i
                         break
-                policy_info['total_premium'] = policy_info['annual_premium'] * policy_info['payment_years']
-                self.warnings.append(
-                    f"Auto-detected premium: {policy_info['annual_premium']:,.0f}/year x "
-                    f"{policy_info['payment_years']} years = {policy_info['total_premium']:,.0f}"
-                )
 
+                detected_total_premium = first_year_prem * detected_payment_years
+
+                policy_info['annual_premium'] = first_year_prem
+                policy_info['payment_years'] = detected_payment_years
+                policy_info['total_premium'] = detected_total_premium
+
+                mismatch = (
+                    (old_annual_premium > 0 and abs(old_annual_premium - first_year_prem) > 0.01)
+                    or (old_payment_years > 0 and old_payment_years != detected_payment_years)
+                    or (old_total_premium > 0 and abs(old_total_premium - detected_total_premium) > 0.01)
+                )
+                if mismatch:
+                    self.warnings.append(
+                        f"Premium normalized by yearly data: "
+                        f"{old_annual_premium:,.0f}/year x {old_payment_years} "
+                        f"-> {first_year_prem:,.0f}/year x {detected_payment_years}"
+                    )
         # Auto-detect age from yearly data
         if yearly_data and policy_info['age_at_issue'] == 0:
             first_age = yearly_data[0].get('age', 0)
