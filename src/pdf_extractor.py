@@ -413,7 +413,8 @@ class AIAPDFExtractor:
                 nrows = len(table)
 
                 # Small tables on early pages are policy info
-                if page_idx <= 1 and nrows <= 4 and ncols <= 4:
+                # (AIA summary tables can have 6-8 columns with premium info)
+                if page_idx <= 1 and nrows <= 5:
                     policy_tables.append(table)
                     continue
 
@@ -790,6 +791,19 @@ class AIAPDFExtractor:
         except Exception:
             pass
 
+        # Fallback: scan page 1 full text for premium if not found from tables
+        if info['annual_premium'] == 0:
+            for text_source in [page1_fitz_text, page1_decoded]:
+                amounts = re.findall(r'([\d,]+(?:\.\d+)?)', text_source)
+                for amt in amounts:
+                    val = clean_numeric(amt)
+                    if 1000 <= val <= 1000000:
+                        premium_candidates.append(val)
+            for val in premium_candidates:
+                if val >= 1000:
+                    info['annual_premium'] = val
+                    break
+
         # Try to detect product name from fitz text (better for Chinese)
         for text_source in [page1_fitz_text, page1_decoded]:
             if '环宇盈活' in text_source or '環宇盈活' in text_source:
@@ -867,7 +881,7 @@ class AIAPDFExtractor:
         # Determine column indices from mapping or use hardcoded defaults
         col_year = nw_col_mapping.get('year', 0)
         col_age = nw_col_mapping.get('age', 1)
-        col_prem = nw_col_mapping.get('cumulative_premium', 2)
+        col_prem = nw_col_mapping.get('cumulative_premium', -1)  # -1 = not present
         col_guar = nw_col_mapping.get('guaranteed_cv', 3)
         col_rev = nw_col_mapping.get('reversionary_bonus', 4)
         col_term = nw_col_mapping.get('terminal_dividend', 5)
@@ -894,7 +908,7 @@ class AIAPDFExtractor:
             age = int(age_str) if age_str.isdigit() else age_at_issue + year
 
             # Extract values using detected or default column indices
-            cumulative_premium = clean_numeric(row[col_prem]) if col_prem < len(row) else 0.0
+            cumulative_premium = clean_numeric(row[col_prem]) if (col_prem >= 0 and col_prem < len(row)) else 0.0
             guaranteed_cv = clean_numeric(row[col_guar]) if col_guar < len(row) else 0.0
             reversionary_bonus = clean_numeric(row[col_rev]) if col_rev < len(row) else 0.0
             terminal_dividend = clean_numeric(row[col_term]) if col_term < len(row) else 0.0
